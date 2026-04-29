@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure Document Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
+
+  .container {
+    width: 90%;
+    max-width: 680px;
+    text-align: center;
+  }
+
+  .header {
+    margin-bottom: 24px;
+  }
+
+  .header h1 {
+    font-size: 13px;
+    letter-spacing: 4px;
+    color: #ff4444;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .header p {
+    font-size: 11px;
+    color: #555;
+    letter-spacing: 2px;
+  }
+
+  .timer-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: #111118;
+    border: 1px solid #ff4444;
+    border-radius: 4px;
+    padding: 10px 24px;
+    margin-bottom: 20px;
+  }
+
+  .timer-dot {
+    width: 8px;
+    height: 8px;
+    background: #ff4444;
+    border-radius: 50%;
+    animation: pulse 1s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+
+  #timer-display {
+    font-size: 22px;
+    font-weight: bold;
+    color: #ff4444;
+    letter-spacing: 3px;
+    min-width: 90px;
+  }
+
+  .timer-label {
+    font-size: 10px;
+    color: #666;
+    letter-spacing: 2px;
+  }
+
+  .photo-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+    border: 1px solid #222;
+  }
+
+  /* LAYER PROTEKSI: overlay transparan di atas foto */
+  .photo-wrapper::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: transparent;
+    z-index: 10;
+    cursor: not-allowed;
+  }
+
+  /* Watermark diagonal */
+  .watermark-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 9;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 60px,
+      rgba(255,68,68,0.06) 60px,
+      rgba(255,68,68,0.06) 62px
+    );
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+  }
+
+  .watermark-text {
+    color: rgba(255, 68, 68, 0.12);
+    font-size: 28px;
+    font-weight: bold;
+    letter-spacing: 6px;
+    transform: rotate(-30deg);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  #photo-img {
+    width: 100%;
+    display: block;
+    pointer-events: none;
+    -webkit-user-drag: none;
+    user-drag: none;
+    -webkit-touch-callout: none;
+    filter: contrast(1.02);
+  }
+
+  .expired-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(10,10,15,0.97);
+    z-index: 20;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .expired-overlay.show { display: flex; }
+
+  .expired-icon {
+    font-size: 48px;
+    color: #ff4444;
+  }
+
+  .expired-overlay h2 {
+    font-size: 18px;
+    color: #ff4444;
+    letter-spacing: 3px;
+  }
+
+  .expired-overlay p {
+    font-size: 11px;
+    color: #555;
+    letter-spacing: 1px;
+  }
+
+  .info-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #0d0d14;
+    border: 1px solid #1a1a28;
+    border-top: none;
+    font-size: 10px;
+    color: #444;
+    letter-spacing: 1px;
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: #22cc66;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: pulse 1.5s infinite;
+  }
+
+  .warning-text {
+    margin-top: 20px;
+    font-size: 10px;
+    color: #333;
+    letter-spacing: 1px;
+    line-height: 1.8;
+  }
+
+  .warning-text span {
+    color: #ff4444;
+    margin-right: 6px;
+  }
+
+  /* Prevent print */
+  @media print {
+    body { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>⚠ Secure Document Viewer</h1>
+    <p>akses dibatasi · tidak dapat diunduh · hanya untuk ditampilkan</p>
+  </div>
+
+  <div class="timer-box">
+    <div class="timer-dot"></div>
+    <div>
+      <div id="timer-display">00:05:00</div>
+      <div class="timer-label">waktu tersisa</div>
+    </div>
+  </div>
+
+  <div class="photo-wrapper" id="photoWrapper">
+    <img
+      id="photo-img"
+      src="GANTI_DENGAN_URL_FOTO_KAMU.jpg"
+      alt=""
+      draggable="false"
+      oncontextmenu="return false;"
+    />
+    <div class="watermark-overlay">
+      <div class="watermark-text">CONFIDENTIAL</div>
+      <div class="watermark-text">CONFIDENTIAL</div>
+      <div class="watermark-text">CONFIDENTIAL</div>
+    </div>
+    <div class="expired-overlay" id="expiredOverlay">
+      <div class="expired-icon">⊘</div>
+      <h2>AKSES BERAKHIR</h2>
+      <p>Waktu tampil foto sudah habis.</p>
+      <p>Hubungi pemilik untuk akses ulang.</p>
+    </div>
+  </div>
+
+  <div class="info-bar">
+    <span><span class="status-dot"></span>LIVE SESSION</span>
+    <span id="session-id">SESSION · ...</span>
+    <span id="expire-time">EXP · loading...</span>
+  </div>
+
+  <div class="warning-text">
+    <div><span>✕</span>Foto ini dilindungi — tidak dapat disimpan, disalin, atau diunduh</div>
+    <div><span>✕</span>Klik kanan, drag, dan print dinonaktifkan</div>
+    <div><span>✕</span>Akses otomatis berakhir setelah timer habis</div>
+  </div>
+</div>
+
+<script>
+  // ══════════════════════════════════════════════
+  // KONFIGURASI — edit bagian ini saja
+  // ══════════════════════════════════════════════
+  const PHOTO_URL = "GANTI_DENGAN_URL_FOTO_KAMU.jpg"; // ← ganti URL foto kamu di sini
+  const DURATION_MINUTES = 5; // ← durasi tampil dalam menit
+  // ══════════════════════════════════════════════
+
+  // Set foto
+  document.getElementById('photo-img').src = PHOTO_URL;
+
+  // Session ID random
+  const sessionId = Math.random().toString(36).substring(2, 10).toUpperCase();
+  document.getElementById('session-id').textContent = 'SESSION · ' + sessionId;
+
+  // Hitung waktu kadaluarsa
+  const expiresAt = new Date(Date.now() + DURATION_MINUTES * 60 * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = d => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  document.getElementById('expire-time').textContent = 'EXP · ' + fmt(expiresAt);
+
+  // Timer countdown
+  let totalSeconds = DURATION_MINUTES * 60;
+  const timerEl = document.getElementById('timer-display');
+  const expiredOverlay = document.getElementById('expiredOverlay');
+  const img = document.getElementById('photo-img');
+
+  function updateTimer() {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    timerEl.textContent = (h > 0 ? pad(h) + ':' : '') + pad(mm) + ':' + pad(s);
+
+    if (totalSeconds <= 30) {
+      timerEl.style.color = '#ff8800';
+    }
+    if (totalSeconds <= 10) {
+      timerEl.style.color = '#ff2222';
+    }
+
+    if (totalSeconds <= 0) {
+      clearInterval(interval);
+      timerEl.textContent = '00:00:00';
+      // Hapus foto dari DOM dan tampilkan overlay
+      img.src = '';
+      img.style.display = 'none';
+      expiredOverlay.classList.add('show');
+    } else {
+      totalSeconds--;
+    }
+  }
+
+  updateTimer();
+  const interval = setInterval(updateTimer, 1000);
+
+  // ══ PROTEKSI ══
+
+  // Blokir klik kanan
+  document.addEventListener('contextmenu', e => e.preventDefault());
+
+  // Blokir drag
+  document.addEventListener('dragstart', e => e.preventDefault());
+
+  // Blokir keyboard shortcut (Ctrl+S, Ctrl+U, Ctrl+Shift+I, F12, dll)
+  document.addEventListener('keydown', function(e) {
+    const blocked = (
+      (e.ctrlKey && ['s','u','p','a'].includes(e.key.toLowerCase())) ||
+      (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(e.key.toLowerCase())) ||
+      e.key === 'F12' ||
+      e.key === 'PrintScreen'
+    );
+    if (blocked) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+  });
+
+  // Blokir print (Ctrl+P)
+  window.addEventListener('beforeprint', () => {
+    img.style.visibility = 'hidden';
+  });
+  window.addEventListener('afterprint', () => {
+    img.style.visibility = 'visible';
+  });
+
+  // Deteksi DevTools terbuka (bukan 100% sempurna tapi membantu)
+  let devtoolsOpen = false;
+  const threshold = 160;
+  setInterval(() => {
+    if (
+      window.outerWidth - window.innerWidth > threshold ||
+      window.outerHeight - window.innerHeight > threshold
+    ) {
+      if (!devtoolsOpen) {
+        devtoolsOpen = true;
+        img.style.filter = 'blur(20px) brightness(0.1)';
+      }
+    } else {
+      if (devtoolsOpen) {
+        devtoolsOpen = false;
+        img.style.filter = 'contrast(1.02)';
+      }
+    }
+  }, 500);
+
+  // Touch callout disable (iOS)
+  document.addEventListener('touchstart', e => {
+    if (e.target === img) e.preventDefault();
+  }, { passive: false });
+
+</script>
+</body>
+</html>
